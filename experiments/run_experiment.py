@@ -199,11 +199,24 @@ def main():
     print(f"Games per experiment: {num_games}")
     print(f"Seeds: {seeds[:5]}{'...' if len(seeds) > 5 else ''}")
     print(f"Experiments to run: {[e['id'] for e in experiments]}")
+    print(f"Total experiments: {len(experiments)}")
+    print()
 
-    for exp in experiments:
+    total_exp = len(experiments)
+    total_start = time.perf_counter()
+
+    for i, exp in enumerate(experiments, 1):
+        print(f"\n[{i}/{total_exp}] ", end="")
         run_single_experiment(exp, num_games, seeds, output_dir, verbose=True)
+        elapsed_total = time.perf_counter() - total_start
+        avg_per_exp = elapsed_total / i
+        remaining = avg_per_exp * (total_exp - i)
+        mins_left = remaining / 60
+        print(f"  ⏱ Total elapsed: {elapsed_total/60:.1f} min | "
+              f"Est. remaining: {mins_left:.1f} min ({total_exp - i} experiments left)")
 
-    print("\n✓ All experiments complete.")
+    total_elapsed = time.perf_counter() - total_start
+    print(f"\n✓ All experiments complete in {total_elapsed/60:.1f} minutes.")
 
 
 if __name__ == "__main__":
