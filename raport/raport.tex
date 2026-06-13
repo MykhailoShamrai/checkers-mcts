@@ -1,0 +1,332 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}
+\addbibresource{references.bib}
+
+\geometry{margin=2.5cm}
+
+\title{Zastosowanie Monte Carlo Tree Search do gry w warcaby \\[0.5em]
+\large Raport końcowy — Metody Sztucznej Inteligencji 2}
+\author{
+  % TODO: Wpisać imiona i nazwiska autorów
+  Autor 1 \and Autor 2
+}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% ===========================================================================
+\begin{abstract}
+W niniejszym raporcie przedstawiono badanie skuteczności algorytmu Monte Carlo Tree Search (MCTS) z~formułą Upper Confidence Bounds Applied to Trees (UCT) w~grze w~warcaby na planszy 8\texttimes8 z~damkami latającymi. Porównano cztery warianty graczy komputerowych: czysty UCT, UCT z~płytkim przeszukiwaniem minimax (hybryda wg Baier i~Winands, 2014), UCT z~wczesnym obcinaniem symulacji i~ewaluacją heurystyczną (Lorentz, 2016; Lanctot et~al., 2014) oraz gracz heurystyczny oparty o~alpha-beta z~ewaluacją inspirowaną programem Chinook. Zbadano wpływ stałej eksploracji~$C$, budżetu iteracji oraz limitu ruchów na skuteczność poszczególnych podejść. Eksperymenty przeprowadzono na co~najmniej 50~partiach dla każdej konfiguracji z~wielokrotnymi ziarnami generatora losowego w~celu zapewnienia powtarzalności i~oceny rozrzutu wyników. Wyniki wskazują, że % TODO: uzupełnić po eksperymentach
+zwiększenie budżetu iteracji istotnie poprawia skuteczność UCT, a~warianty hybrydowe oferują mniejszą wariancję wyników kosztem dłuższego czasu obliczeń. Skrócenie limitu ruchów zmienia ranking algorytmów, faworyzując bardziej agresywne strategie materiałowe.
+\end{abstract}
+
+% ===========================================================================
+\section{Wprowadzenie}
+\label{sec:intro}
+
+Monte Carlo Tree Search (MCTS) to rodzina algorytmów przeszukiwania drzewa gry, która od czasu przełomowych wyników w~Go \cite{silver2016mastering} znajduje zastosowanie w~wielu grach planszowych i~problemach decyzyjnych. Kluczową zaletą MCTS jest brak konieczności definiowania funkcji oceny pozycji — algorytm uczy się wartości stanów z~losowych symulacji (playoutów). Wariant UCT \cite{kocsis2006bandit} łączy przeszukiwanie drzewa z~formułą UCB1, zapewniając asymptotyczną zbieżność do optymalnej strategii.
+
+Celem niniejszej pracy jest zbadanie skuteczności UCT i~jego wariantów w~grze w~warcaby (draughts) na planszy 8\texttimes8 z~damkami latającymi. Warcaby są grą o~pełnej informacji z~przestrzenią stanów rzędu $5 \times 10^{20}$ \cite{schaeffer2007checkers}, co czyni je odpowiednim testbedem — gra jest wystarczająco złożona, by wymagać zaawansowanych algorytmów, a~jednocześnie istnieją silne programy heurystyczne (Chinook) jako punkt odniesienia.
+
+\subsection{Cel badania}
+Porównanie czterech graczy komputerowych pod kątem:
+\begin{itemize}[nosep]
+  \item skuteczności (win rate) przy różnych budżetach obliczeniowych,
+  \item stabilności wyników (wariancja między ziarnami RNG),
+  \item czasu obliczeń na ruch,
+  \item wrażliwości na zmianę parametrów gry (limit ruchów).
+\end{itemize}
+
+% ===========================================================================
+\section{Opis problemu}
+\label{sec:problem}
+
+\subsection{Zasady gry}
+Zastosowano wariant warcabow na planszy 8\texttimes8 z~następującymi regułami:
+\begin{itemize}[nosep]
+  \item Plansza 8\texttimes8, ruch wyłącznie po ciemnych polach (32 pola gry).
+  \item 12 pionków na stronę; białe zaczynają (na rzędach 5--7), czarne na rzędach 0--2.
+  \item Białe ruszają się jako pierwsze.
+  \item Pionek porusza się o~jedno pole po przekątnej do przodu.
+  \item Bicie jest \textbf{obowiązkowe} — jeśli istnieje ruch bijący, gracz musi bić.
+  \item Pionek bije do przodu \textbf{i} do tyłu (skok nad sąsiednim wrogiem na puste pole za nim).
+  \item Wielobicia są obowiązkowe i~kontynuowane tym samym pionkiem aż do wyczerpania możliwości.
+  \item Zbite figury usuwane są dopiero po zakończeniu całej sekwencji bicia.
+  \item Damki są \textbf{latające}: poruszają się i~biją po całej przekątnej (mogą przeskoczyć wroga na dowolnej odległości i~wylądować na dowolnym pustym polu za nim).
+  \item Promocja piona do damki następuje po zakończeniu całego ruchu na ostatnim rzędzie.
+  \item Limit ruchów: 150 półruchów (plies); po przekroczeniu — remis.
+  \item Zasada maksymalnego bicia jest \textbf{wyłączona} (dowolna pełna sekwencja bicia jest legalna).
+\end{itemize}
+
+\subsection{Modyfikacje względem klasycznych zasad}
+\begin{itemize}[nosep]
+  \item Wprowadzono limit 150 ruchów w~celu uniknięcia nieskończonych partii (standardowe zasady nie przewidują takiego limitu).
+  \item Zasada najdłuższego bicia została wyłączona — upraszcza implementację i~nie zmienia istotnie charakteru gry.
+  \item Promocja w~trakcie wielobicia następuje dopiero na końcu sekwencji (pion kontynuuje jako pion nawet jeśli przebiega przez rząd promocji).
+\end{itemize}
+
+% ===========================================================================
+\section{Przegląd literatury}
+\label{sec:literature}
+
+\subsection{MCTS i UCT}
+Algorytm MCTS w~wariancie UCT został zaproponowany przez Kocsisa i~Szepesváriego \cite{kocsis2006bandit}. Formuła selekcji:
+\begin{equation}
+  a^* = \arg\max_a \left[ \frac{Q(s,a)}{N(s,a)} + C \cdot \sqrt{\frac{\ln N(s)}{N(s,a)}} \right]
+  \label{eq:ucb1}
+\end{equation}
+gdzie $Q(s,a)$ to skumulowana nagroda, $N(s,a)$ liczba odwiedzin, a~$C$ stała eksploracji. Świechowski et~al. \cite{swiechowski2023mcts} przedstawiają obszerny przegląd modyfikacji MCTS.
+
+\subsection{UCT + Minimax (hybryda)}
+Baier i~Winands \cite{baier2014mcts} zaproponowali zastąpienie losowego playoutu płytkim przeszukiwaniem minimax. Zamiast symulacji do końca gry, z~liścia drzewa MCTS uruchamiany jest minimax o~głębokości~$d$, który zwraca dokładniejszą ocenę pozycji. Zmniejsza to wariancję wyników kosztem większego czasu obliczeniowego na iterację.
+
+\subsection{UCT + Early Termination}
+Lorentz \cite{lorentz2016evaluation} zaproponował obcinanie symulacji po ustalonej liczbie ruchów i~ocenę pozycji heurystyką. Lanctot et~al. \cite{lanctot2014mcts} wprowadzili blending:
+\begin{equation}
+  \hat{Q} = (1 - \alpha) \cdot \frac{r}{n} + \alpha \cdot v
+  \label{eq:blending}
+\end{equation}
+gdzie $v$ to ewaluacja heurystyczna węzła, a~$\alpha \in [0,1]$ kontroluje siłę blendingu.
+
+\subsection{Heurystyki w warcabach}
+Program Chinook \cite{schaeffer1997one} stosował ewaluację łączącą materiał (pionek=1, damka=3), kontrolę centrum, mobilność i~bliskość promocji. Podejście to stanowi nasz benchmark heurystyczny.
+
+% ===========================================================================
+\section{Metodologia}
+\label{sec:methodology}
+
+\subsection{Zaimplementowani gracze}
+
+\subsubsection{UCT bazowy}
+Standardowy cztero-fazowy MCTS: selekcja (UCB1, formuła~\ref{eq:ucb1}), ekspansja (jeden losowy nieodwiedzony ruch), symulacja (losowy playout do stanu terminalnego), propagacja wsteczna. Parametry: liczba iteracji, stała~$C$, ziarno RNG.
+
+\subsubsection{UCT + Minimax}
+Jak UCT bazowy, ale faza symulacji zastąpiona przeszukiwaniem minimax z~obcinaniem alpha-beta o~konfigurowalnej głębokości~$d$. Funkcja oceny liścia: heurystyka materiałowa znormalizowana do $[-1, 1]$:
+\begin{equation}
+  h = \frac{M_{\text{own}} - M_{\text{opp}}}{M_{\text{own}} + M_{\text{opp}}}
+  \label{eq:material}
+\end{equation}
+gdzie $M = \text{(liczba pionków)} \cdot 1 + \text{(liczba damek)} \cdot 3$.
+
+\subsubsection{UCT + Early Termination}
+Symulacja jest obcinana po $k$ ruchach; pozycja oceniana heurystyką materiałową (formuła~\ref{eq:material}). Opcjonalnie stosowany blending (formuła~\ref{eq:blending}) z~parametrem~$\alpha$.
+
+\subsubsection{Alpha-beta heurystyczny}
+Iterative-deepening alpha-beta (negamax) z~ewaluacją inspirowaną Chinookiem:
+\begin{itemize}[nosep]
+  \item materiał (pionek=1, damka=3),
+  \item bonus za kontrolę centrum (pola 3--4 w~obu osiach),
+  \item bliskość promocji (im bliżej rzedu promocji, tym wyżej),
+  \item bonus za obronę ostatniego rzędu.
+\end{itemize}
+Maksymalna głębokość przeszukiwania: parametr \texttt{max\_depth} (domyślnie 6).
+
+\subsection{Powtarzalność}
+Każdy gracz oparty na losowości przyjmuje jawne ziarno generatora (parametr \texttt{seed}). Dla tego samego ziarna wybór ruchu jest deterministyczny. Każdy eksperyment loguje użyte ziarno do pliku CSV.
+
+\subsection{Plan eksperymentów}
+Eksperymenty zorganizowane w~macierz 18 konfiguracji (Tabela~\ref{tab:experiments}):
+\begin{itemize}[nosep]
+  \item \textbf{H1}: UCT vs AlphaBeta — sweep po $C \in \{0.1, 0.3, 0.7, 1.0, 1.4, 2.0, 3.0\}$ przy 100 iteracjach; sweep po budżecie $\{100, 500, 1000, 5000, 10000\}$ przy $C=1.4$.
+  \item \textbf{H2}: UCT+Minimax vs UCT — 1000 i 5000 iteracji, $d=2$.
+  \item \textbf{H3}: UCT+EarlyTerm vs UCT — 1000 i 5000 iteracji, $k=20$, $\alpha=0.5$.
+  \item \textbf{H4}: Powtórzenie wybranych porównań z~limitem 100 ruchów (vs domyślne 150).
+\end{itemize}
+
+Dla każdej konfiguracji: minimum 50 partii, minimum 20 ziaren, zamiana kolorów (co druga partia).
+
+\begin{table}[H]
+\centering
+\caption{Macierz eksperymentów}
+\label{tab:experiments}
+\small
+\begin{tabular}{llllrrrl}
+\toprule
+ID & Hipoteza & Gracz A & Gracz B & Iteracje & $C$ & Limit & Uwagi \\
+\midrule
+E01--E07 & H1 & UCT & AlphaBeta & 100 & 0.1--3.0 & 150 & C-sweep \\
+E08--E11 & H1 & UCT & AlphaBeta & 500--10k & 1.4 & 150 & Budget-sweep \\
+E12--E13 & H2 & UCT+Mini & UCT & 1k/5k & 1.4 & 150 & $d=2$ \\
+E14--E15 & H3 & UCT+ET & UCT & 1k/5k & 1.4 & 150 & $k=20, \alpha=0.5$ \\
+E16--E18 & H4 & Różni & AlphaBeta & 1000 & 1.4 & 100 & Skrócony limit \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ===========================================================================
+\section{Hipotezy badawcze}
+\label{sec:hypotheses}
+
+\begin{description}
+  \item[H1] Czysty UCT, po strojeniu parametru $C$, osiąga wyższy win rate od gracza heurystycznego dla niskiego i~średniego budżetu iteracji.
+  \item[H2] UCT + minimax rollout (płytki) obniża wariancję wyników między ziarnami względem czystego UCT, oferując bardziej stabilną jakość decyzji.
+  \item[H3] UCT + early termination z~ewaluacją heurystyczną skraca średni czas na ruch przy porównywalnym win rate do czystego UCT.
+  \item[H4] Zmiana limitu ruchów ze 150 na 100 zmienia ranking algorytmów i~zwiększa odsetek zwycięstw graczy agresywnie materialowych.
+\end{description}
+
+% ===========================================================================
+\section{Wyniki eksperymentów}
+\label{sec:results}
+
+% TODO: Uzupełnić po przeprowadzeniu pełnych eksperymentów.
+% Poniżej przygotowane szablony na wykresy i tabele.
+
+\subsection{H1: Wpływ stałej eksploracji $C$}
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=0.8\textwidth]{results/plots/h1_c_sweep.png}
+\caption{Win rate UCT vs AlphaBeta w~funkcji stałej eksploracji $C$ (100 iteracji, 50 partii na punkt). Słupki błędów: 95\% CI.}
+\label{fig:c_sweep}
+\end{figure}
+
+% TODO: Opis wyników — przy jakim C UCT osiąga najlepsze rezultaty?
+
+\subsection{H1: Wpływ budżetu iteracji}
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=0.8\textwidth]{results/plots/h1_budget_sweep.png}
+\caption{Win rate UCT vs AlphaBeta w~funkcji budżetu iteracji ($C=1.4$, 50 partii na punkt).}
+\label{fig:budget_sweep}
+\end{figure}
+
+% TODO: Przy jakim budżecie UCT zaczyna dominować nad alpha-beta?
+
+\subsection{H2 i H3: Porównanie wariantów UCT}
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=0.8\textwidth]{results/plots/h2_h3_variants.png}
+\caption{Win rate wariantów UCT (minimax, early termination) vs czysty UCT.}
+\label{fig:variants}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Porównanie wariancji win rate między ziarnami}
+\label{tab:variance}
+\begin{tabular}{lrrr}
+\toprule
+Gracz & Win rate & Std & Avg time/move [s] \\
+\midrule
+UCT (1000 iter) & -- & -- & -- \\
+UCT+Minimax (1000 iter, $d=2$) & -- & -- & -- \\
+UCT+EarlyTerm (1000 iter, $k=20$) & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% TODO: Uzupełnić tabelę danymi z eksperymentów E12-E15.
+
+\subsection{H4: Wpływ limitu ruchów}
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=0.8\textwidth]{results/plots/h4_move_limit.png}
+\caption{Porównanie win rate vs AlphaBeta przy limicie 150 i~100 ruchów.}
+\label{fig:move_limit}
+\end{figure}
+
+% TODO: Czy skrócenie limitu zmienia ranking? Kto zyskuje, kto traci?
+
+\subsection{Czas obliczeń}
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=0.9\textwidth]{results/plots/time_per_move.png}
+\caption{Średni czas na ruch dla poszczególnych eksperymentów.}
+\label{fig:time}
+\end{figure}
+
+% ===========================================================================
+\section{Testy człowiek--komputer}
+\label{sec:human_tests}
+
+Interfejs graficzny zrealizowano w~bibliotece Pygame. Przeprowadzono testy z~udziałem co najmniej 5 osób. Każdy uczestnik rozegrał partię z~wybranym botem i~wypełnił krótki formularz ewaluacyjny.
+
+\begin{table}[H]
+\centering
+\caption{Wyniki testów człowiek--komputer}
+\label{tab:human}
+\begin{tabular}{clcccl}
+\toprule
+\# & Przeciwnik & Wynik & Czytelność GUI & Siła bota & Uwagi \\
+\midrule
+1 & -- & -- & -- & -- & -- \\
+2 & -- & -- & -- & -- & -- \\
+3 & -- & -- & -- & -- & -- \\
+4 & -- & -- & -- & -- & -- \\
+5 & -- & -- & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% TODO: Uzupełnić po testach z użytkownikami.
+
+% ===========================================================================
+\section{Wnioski}
+\label{sec:conclusions}
+
+\begin{description}
+  \item[H1:] % TODO: Czy UCT z dobranym C pokonuje alpha-beta? Przy jakim budżecie?
+  \item[H2:] % TODO: Czy hybryda minimax daje mniejszą wariancję?
+  \item[H3:] % TODO: Czy early termination skraca czas przy zachowaniu win rate?
+  \item[H4:] % TODO: Czy zmiana limitu ruchów zmienia ranking?
+\end{description}
+
+\subsection{Ograniczenia badania}
+\begin{itemize}[nosep]
+  \item Głębokość minimax w~hybrydzie ograniczona do $d=2$ ze względu na czas obliczeń.
+  \item Alpha-beta z~głębokością 6 może nie być optymalnym benchmarkiem dla najwyższych budżetów UCT.
+  \item Brak optymalizacji silnika (np.\ bitboardy) ogranicza maksymalną liczbę iteracji w~rozsądnym czasie.
+\end{itemize}
+
+\subsection{Kierunki dalszych badań}
+\begin{itemize}[nosep]
+  \item RAVE/AMAF jako dodatkowe usprawnienie UCT.
+  \item Progressive widening w~drzewie MCTS.
+  \item Learned evaluation (np.\ prosta sieć neuronowa) zamiast ręcznej heurystyki.
+\end{itemize}
+
+% ===========================================================================
+\section{Wykorzystanie dużych modeli językowych}
+\label{sec:llm}
+
+W~ramach projektu wykorzystano duże modele językowe (LLM) w~następującym zakresie:
+
+\subsection{Kod źródłowy}
+\begin{itemize}[nosep]
+  \item Generowanie szkieletu architektury projektu (struktura katalogów, interfejsy).
+  \item Implementacja silnika reguł gry (generator ruchów, wielobicia, damki latające).
+  \item Implementacja graczy (UCT, UCT+Minimax, UCT+EarlyTerm, AlphaBeta).
+  \item Implementacja GUI (Pygame) i harnessu eksperymentalnego.
+  \item Generowanie skryptów analizy statystycznej i wizualizacji.
+\end{itemize}
+Każdy wygenerowany fragment był weryfikowany przez autorów poprzez testy jednostkowe i~smoke testy runtime.
+
+\subsection{Raport}
+\begin{itemize}[nosep]
+  \item Generowanie szablonu LaTeX raportu końcowego.
+  \item Wsparcie przy formułowaniu opisów metodologii.
+\end{itemize}
+Treść merytoryczna (interpretacja wyników, wnioski) jest autorska.
+
+% ===========================================================================
+\printbibliography
+
+\end{document}

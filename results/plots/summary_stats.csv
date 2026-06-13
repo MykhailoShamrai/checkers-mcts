@@ -1,0 +1,2 @@
+experiment_id,n_games,player_a,player_b,player_a_params,player_b_params,move_limit,a_wins,b_wins,draws,a_win_rate,b_win_rate,draw_rate,a_win_rate_ci95,avg_game_length,std_game_length,avg_time_white,avg_time_black
+E01,4,uct,alphabeta,"{'iterations': 100, 'c': 0.1}",{'max_depth': 6},150,0,4,0,0.0,1.0,0.0,0.0,40.5,7.852812659593164,0.25484775000000004,0.19935925
