@@ -280,3 +280,99 @@ def pixel_to_square(pos: tuple[int, int]) -> Optional[tuple[int, int]]:
     col = x // SQUARE_SIZE
     row = y // SQUARE_SIZE
     return (row, col)
+
+
+def _square_center(row: int, col: int) -> tuple[int, int]:
+    """Get pixel center of a board square."""
+    cx = col * SQUARE_SIZE + SQUARE_SIZE // 2 + BOARD_OFFSET_X
+    cy = row * SQUARE_SIZE + SQUARE_SIZE // 2 + BOARD_OFFSET_Y
+    return cx, cy
+
+
+def animate_move(
+    screen: pygame.Surface,
+    board_before,
+    move: "Move",
+    duration_ms: int = 200,
+    draw_frame_callback=None,
+) -> None:
+    """Animate a piece sliding from origin to destination.
+
+    Args:
+        screen: pygame display surface
+        board_before: board state BEFORE the move (numpy array)
+        move: the Move being played
+        duration_ms: animation duration in milliseconds
+        draw_frame_callback: callable(surface) that draws the full static frame
+            (board, panels, status) WITHOUT the moving piece. If None, just draws board.
+    """
+    clock = pygame.time.Clock()
+
+    origin = move.origin
+    dest = move.destination
+    piece = int(board_before[origin[0], origin[1]])
+    if piece == C.EMPTY:
+        return
+
+    color = C.color_of(piece)
+    is_king = C.is_king(piece)
+
+    start_x, start_y = _square_center(origin[0], origin[1])
+    end_x, end_y = _square_center(dest[0], dest[1])
+
+    # For multi-step captures, animate through intermediate squares
+    steps = list(move.squares)
+    if len(steps) < 2:
+        steps = [origin, dest]
+
+    # Calculate total duration per segment
+    num_segments = len(steps) - 1
+    segment_ms = duration_ms // max(num_segments, 1)
+
+    # Temporarily clear the moving piece from the board for rendering
+    import numpy as np
+    temp_board = board_before.copy()
+    temp_board[origin[0], origin[1]] = C.EMPTY
+
+    for seg_i in range(num_segments):
+        seg_start = steps[seg_i]
+        seg_end = steps[seg_i + 1]
+        sx, sy = _square_center(seg_start[0], seg_start[1])
+        ex, ey = _square_center(seg_end[0], seg_end[1])
+
+        # If capture, remove the captured piece between seg_start and seg_end
+        if move.is_capture and move.captured:
+            mid_r = (seg_start[0] + seg_end[0]) // 2
+            mid_c = (seg_start[1] + seg_end[1]) // 2
+            if temp_board[mid_r, mid_c] != C.EMPTY:
+                temp_board[mid_r, mid_c] = C.EMPTY
+
+        elapsed = 0
+        while elapsed < segment_ms:
+            dt = clock.tick(60)
+            elapsed += dt
+            t = min(elapsed / segment_ms, 1.0)
+            # Ease-out quad for smooth deceleration
+            t_eased = 1.0 - (1.0 - t) ** 2
+
+            cur_x = sx + (ex - sx) * t_eased
+            cur_y = sy + (ey - sy) * t_eased
+
+            # Draw full frame without the moving piece
+            if draw_frame_callback:
+                draw_frame_callback(screen, temp_board)
+            else:
+                screen.fill(COLOR_BG)
+                draw_board(screen)
+                draw_pieces(screen, temp_board)
+
+            # Draw the moving piece at interpolated position
+            _draw_piece(screen, int(cur_x), int(cur_y), color, is_king)
+
+            pygame.display.flip()
+
+            # Consume events to prevent freeze
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    raise SystemExit

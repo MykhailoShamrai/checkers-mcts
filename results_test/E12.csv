@@ -1,0 +1,5 @@
+experiment_id,game_id,seed,player_a,player_b,player_a_params,player_b_params,white_player,black_player,winner,winner_color,num_plies,avg_time_white,avg_time_black,move_limit
+E12,0,0,uct_minimax,uct,"{'iterations': 1000, 'c': 1.4, 'minimax_depth': 2}","{'iterations': 1000, 'c': 1.4}",uct_minimax,uct,draw,draw,150,2.963014,1.648646,150
+E12,1,1,uct_minimax,uct,"{'iterations': 1000, 'c': 1.4, 'minimax_depth': 2}","{'iterations': 1000, 'c': 1.4}",uct,uct_minimax,a,-1,56,2.742222,2.252011,150
+E12,2,2,uct_minimax,uct,"{'iterations': 1000, 'c': 1.4, 'minimax_depth': 2}","{'iterations': 1000, 'c': 1.4}",uct_minimax,uct,draw,draw,150,3.289256,1.786780,150
+E12,3,3,uct_minimax,uct,"{'iterations': 1000, 'c': 1.4, 'minimax_depth': 2}","{'iterations': 1000, 'c': 1.4}",uct,uct_minimax,b,1,55,2.929030,2.727882,150

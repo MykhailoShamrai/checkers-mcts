@@ -23,6 +23,7 @@ from checkers.gui.board_view import (
     draw_status,
     draw_bottom_bar,
     pixel_to_square,
+    animate_move,
 )
 from checkers.gui.menu import GameConfig, PlayerConfig, run_menu
 from checkers.players.base import Player
@@ -86,6 +87,17 @@ def run_app() -> None:
 
     clock = pygame.time.Clock()
 
+    def _draw_frame(surface, board):
+        """Draw a full frame with a given board (used by animation)."""
+        surface.fill(COLOR_BG)
+        draw_board(surface)
+        draw_pieces(surface, board)
+        draw_captured_pieces(surface,
+                            white_men_captured, white_kings_captured,
+                            black_men_captured, black_kings_captured)
+        draw_status(surface, status_text, game_over)
+        draw_bottom_bar(surface, state.ply, state.move_limit)
+
     while True:
         # --- Event handling ---
         for event in pygame.event.get():
@@ -115,17 +127,39 @@ def run_app() -> None:
                 if current_player is None:  # human turn
                     sq = pixel_to_square(event.pos)
                     if sq is not None:
-                        old_board = state.board.copy()
-                        selected, state, legal_moves, game_over = _handle_click(
-                            sq, selected, state, legal_moves
-                        )
-                        # Count newly captured pieces
-                        _update_captures(old_board, state.board,
-                                         locals_dict := {})
-                        white_men_captured += locals_dict.get("wm", 0)
-                        white_kings_captured += locals_dict.get("wk", 0)
-                        black_men_captured += locals_dict.get("bm", 0)
-                        black_kings_captured += locals_dict.get("bk", 0)
+                        # Check if this click completes a move
+                        move_to_play = None
+                        if selected is not None:
+                            for move in legal_moves:
+                                if move.origin == selected and move.destination == sq:
+                                    move_to_play = move
+                                    break
+
+                        if move_to_play is not None:
+                            # Animate then play
+                            animate_move(screen, state.board, move_to_play,
+                                         duration_ms=200, draw_frame_callback=_draw_frame)
+                            old_board = state.board.copy()
+                            state = state.play(move_to_play)
+                            _update_captures(old_board, state.board, locals_dict := {})
+                            white_men_captured += locals_dict.get("wm", 0)
+                            white_kings_captured += locals_dict.get("wk", 0)
+                            black_men_captured += locals_dict.get("bm", 0)
+                            black_kings_captured += locals_dict.get("bk", 0)
+                            legal_moves = state.legal_moves() if not state.is_terminal() else []
+                            selected = None
+                            game_over = state.is_terminal()
+                        else:
+                            # Select a piece that has legal moves
+                            piece = int(state.board[sq[0], sq[1]])
+                            if piece != C.EMPTY and C.color_of(piece) == state.to_move:
+                                has_moves = any(m.origin == sq for m in legal_moves)
+                                if has_moves:
+                                    selected = sq
+                                else:
+                                    selected = None
+                            else:
+                                selected = None
                         status_text = _status_text(state, config, game_over)
 
         # --- Bot turn ---
@@ -144,6 +178,9 @@ def run_app() -> None:
 
         # Check if bot finished
         if bot_thinking and bot_move_result is not None:
+            # Animate the bot's move
+            animate_move(screen, state.board, bot_move_result,
+                         duration_ms=250, draw_frame_callback=_draw_frame)
             old_board = state.board.copy()
             state = state.play(bot_move_result)
             # Count captures from bot move
