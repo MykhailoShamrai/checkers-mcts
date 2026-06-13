@@ -1,4 +1,11 @@
-"""Board rendering and click-to-square mapping for the Pygame GUI."""
+"""Board rendering and click-to-square mapping for the Pygame GUI.
+
+Redesigned for a polished, modern look with:
+- Wooden board texture colors with subtle bevels
+- 3D-style pieces with highlights and shadows
+- Captured pieces panels on both sides
+- Smooth highlights and legal move indicators
+"""
 
 from __future__ import annotations
 
@@ -10,64 +17,143 @@ from checkers.engine import constants as C
 from checkers.engine.move import Move
 
 # ------------------------------------------------------------------
-# Visual constants
+# Layout constants
 # ------------------------------------------------------------------
-SQUARE_SIZE = 80
-BOARD_PX = SQUARE_SIZE * C.BOARD_SIZE  # 640
-MARGIN_TOP = 50  # space for status text
-WINDOW_W = BOARD_PX
-WINDOW_H = BOARD_PX + MARGIN_TOP
+SQUARE_SIZE = 72
+BOARD_PX = SQUARE_SIZE * C.BOARD_SIZE  # 576
+PANEL_W = 100  # side panels for captured pieces
+MARGIN_TOP = 60  # top status bar
+MARGIN_BOTTOM = 40  # bottom info bar
+BOARD_OFFSET_X = PANEL_W
+BOARD_OFFSET_Y = MARGIN_TOP
+WINDOW_W = BOARD_PX + 2 * PANEL_W
+WINDOW_H = BOARD_PX + MARGIN_TOP + MARGIN_BOTTOM
 
-COLOR_LIGHT = (240, 217, 181)
-COLOR_DARK = (181, 136, 99)
-COLOR_HIGHLIGHT = (255, 255, 100, 150)
-COLOR_LEGAL_DOT = (80, 200, 80)
-COLOR_WHITE_PIECE = (255, 255, 255)
-COLOR_BLACK_PIECE = (30, 30, 30)
-COLOR_KING_MARKER = (220, 50, 50)
-COLOR_BG = (40, 40, 40)
-COLOR_TEXT = (255, 255, 255)
+# ------------------------------------------------------------------
+# Color palette
+# ------------------------------------------------------------------
+COLOR_LIGHT = (245, 222, 179)  # wheat
+COLOR_DARK = (139, 90, 43)  # saddle brown
+COLOR_DARK_HOVER = (160, 110, 60)
+COLOR_HIGHLIGHT = (255, 215, 0, 120)  # gold semi-transparent
+COLOR_LAST_MOVE = (100, 180, 255, 80)  # blue hint for last move
+COLOR_LEGAL_FILL = (50, 205, 50, 100)  # green semi-transparent
+COLOR_LEGAL_RING = (34, 139, 34)
 
+COLOR_WHITE_PIECE = (255, 250, 240)  # floral white
+COLOR_WHITE_DARK = (200, 195, 185)
+COLOR_WHITE_HIGHLIGHT = (255, 255, 255)
+COLOR_BLACK_PIECE = (50, 50, 50)
+COLOR_BLACK_DARK = (20, 20, 20)
+COLOR_BLACK_HIGHLIGHT = (90, 90, 90)
+COLOR_KING_CROWN = (255, 215, 0)  # gold crown
+COLOR_KING_CROWN_DARK = (184, 134, 11)
+
+COLOR_BG = (32, 32, 36)
+COLOR_PANEL_BG = (42, 42, 48)
+COLOR_BORDER = (80, 60, 40)
+COLOR_TEXT = (240, 240, 240)
+COLOR_TEXT_DIM = (160, 160, 160)
+COLOR_TEXT_GOLD = (255, 215, 0)
+COLOR_TEXT_RED = (255, 80, 80)
+COLOR_TEXT_GREEN = (80, 255, 80)
+
+
+# ------------------------------------------------------------------
+# Drawing functions
+# ------------------------------------------------------------------
 
 def draw_board(surface: pygame.Surface) -> None:
-    """Draw the 8x8 board squares."""
+    """Draw the 8x8 board with border and coordinate labels."""
+    # Board border
+    border_rect = (
+        BOARD_OFFSET_X - 4, BOARD_OFFSET_Y - 4,
+        BOARD_PX + 8, BOARD_PX + 8,
+    )
+    pygame.draw.rect(surface, COLOR_BORDER, border_rect, border_radius=3)
+
     for row in range(C.BOARD_SIZE):
         for col in range(C.BOARD_SIZE):
-            x = col * SQUARE_SIZE
-            y = row * SQUARE_SIZE + MARGIN_TOP
-            color = COLOR_DARK if (row + col) % 2 == 1 else COLOR_LIGHT
-            pygame.draw.rect(surface, color, (x, y, SQUARE_SIZE, SQUARE_SIZE))
+            x = col * SQUARE_SIZE + BOARD_OFFSET_X
+            y = row * SQUARE_SIZE + BOARD_OFFSET_Y
+            if (row + col) % 2 == 1:
+                pygame.draw.rect(surface, COLOR_DARK, (x, y, SQUARE_SIZE, SQUARE_SIZE))
+                # Subtle inner shadow on dark squares
+                pygame.draw.rect(surface, (120, 75, 35), (x, y, SQUARE_SIZE, 2))
+                pygame.draw.rect(surface, (120, 75, 35), (x, y, 2, SQUARE_SIZE))
+            else:
+                pygame.draw.rect(surface, COLOR_LIGHT, (x, y, SQUARE_SIZE, SQUARE_SIZE))
+
+    # Coordinate labels
+    font = pygame.font.SysFont("Consolas", 12)
+    for i in range(C.BOARD_SIZE):
+        # Row numbers (left side)
+        label = font.render(str(i), True, COLOR_TEXT_DIM)
+        surface.blit(label, (BOARD_OFFSET_X - 14, BOARD_OFFSET_Y + i * SQUARE_SIZE + SQUARE_SIZE // 2 - 6))
+        # Column numbers (bottom)
+        label = font.render(str(i), True, COLOR_TEXT_DIM)
+        surface.blit(label, (BOARD_OFFSET_X + i * SQUARE_SIZE + SQUARE_SIZE // 2 - 4, BOARD_OFFSET_Y + BOARD_PX + 4))
+
+
+def _draw_piece(surface: pygame.Surface, cx: int, cy: int, color: int, is_king: bool) -> None:
+    """Draw a single piece with 3D shading and optional crown."""
+    radius = SQUARE_SIZE // 2 - 8
+
+    if color == C.WHITE:
+        base_color = COLOR_WHITE_PIECE
+        dark_color = COLOR_WHITE_DARK
+        highlight_color = COLOR_WHITE_HIGHLIGHT
+    else:
+        base_color = COLOR_BLACK_PIECE
+        dark_color = COLOR_BLACK_DARK
+        highlight_color = COLOR_BLACK_HIGHLIGHT
+
+    # Shadow
+    pygame.draw.circle(surface, (0, 0, 0, 60), (cx + 2, cy + 3), radius)
+
+    # Base (3D effect — darker bottom ring)
+    pygame.draw.circle(surface, dark_color, (cx, cy + 2), radius)
+    pygame.draw.circle(surface, base_color, (cx, cy), radius)
+
+    # Top highlight (glossy effect)
+    highlight_r = radius // 2
+    pygame.draw.circle(surface, highlight_color, (cx - radius // 4, cy - radius // 4), highlight_r)
+
+    # Outer ring
+    pygame.draw.circle(surface, dark_color, (cx, cy), radius, 2)
+
+    # King crown
+    if is_king:
+        crown_r = radius // 2 + 2
+        pygame.draw.circle(surface, COLOR_KING_CROWN_DARK, (cx, cy), crown_r)
+        pygame.draw.circle(surface, COLOR_KING_CROWN, (cx, cy), crown_r - 2)
+        # Crown symbol: small star/triangle hints
+        font = pygame.font.SysFont("Segoe UI Symbol", 18, bold=True)
+        crown_text = font.render("♔" if color == C.WHITE else "♚", True, (60, 30, 0))
+        surface.blit(crown_text, (cx - crown_text.get_width() // 2, cy - crown_text.get_height() // 2))
 
 
 def draw_pieces(surface: pygame.Surface, board) -> None:
-    """Draw pieces on the board from a numpy array."""
+    """Draw all pieces on the board."""
     for row in range(C.BOARD_SIZE):
         for col in range(C.BOARD_SIZE):
             piece = int(board[row, col])
             if piece == C.EMPTY:
                 continue
-            cx = col * SQUARE_SIZE + SQUARE_SIZE // 2
-            cy = row * SQUARE_SIZE + MARGIN_TOP + SQUARE_SIZE // 2
-            radius = SQUARE_SIZE // 2 - 8
-
-            color = COLOR_WHITE_PIECE if C.color_of(piece) == C.WHITE else COLOR_BLACK_PIECE
-            pygame.draw.circle(surface, color, (cx, cy), radius)
-            # Outline
-            pygame.draw.circle(surface, (100, 100, 100), (cx, cy), radius, 2)
-
-            # King marker
-            if C.is_king(piece):
-                pygame.draw.circle(surface, COLOR_KING_MARKER, (cx, cy), radius // 3)
+            cx = col * SQUARE_SIZE + SQUARE_SIZE // 2 + BOARD_OFFSET_X
+            cy = row * SQUARE_SIZE + SQUARE_SIZE // 2 + BOARD_OFFSET_Y
+            _draw_piece(surface, cx, cy, C.color_of(piece), C.is_king(piece))
 
 
 def draw_highlight(surface: pygame.Surface, square: tuple[int, int]) -> None:
-    """Highlight a selected square."""
+    """Highlight selected square with golden glow."""
     row, col = square
-    x = col * SQUARE_SIZE
-    y = row * SQUARE_SIZE + MARGIN_TOP
+    x = col * SQUARE_SIZE + BOARD_OFFSET_X
+    y = row * SQUARE_SIZE + BOARD_OFFSET_Y
     highlight_surf = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
     highlight_surf.fill(COLOR_HIGHLIGHT)
     surface.blit(highlight_surf, (x, y))
+    pygame.draw.rect(surface, (255, 215, 0), (x, y, SQUARE_SIZE, SQUARE_SIZE), 3, border_radius=2)
 
 
 def draw_legal_targets(
@@ -75,27 +161,120 @@ def draw_legal_targets(
     moves: list[Move],
     selected: tuple[int, int],
 ) -> None:
-    """Draw dots on squares that are legal destinations from `selected`."""
+    """Draw legal move indicators — translucent circles with ring."""
     for move in moves:
         if move.origin == selected:
             dest_row, dest_col = move.destination
-            cx = dest_col * SQUARE_SIZE + SQUARE_SIZE // 2
-            cy = dest_row * SQUARE_SIZE + MARGIN_TOP + SQUARE_SIZE // 2
-            pygame.draw.circle(surface, COLOR_LEGAL_DOT, (cx, cy), 12)
+            cx = dest_col * SQUARE_SIZE + SQUARE_SIZE // 2 + BOARD_OFFSET_X
+            cy = dest_row * SQUARE_SIZE + SQUARE_SIZE // 2 + BOARD_OFFSET_Y
+            # Semi-transparent fill
+            dot_surf = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+            pygame.draw.circle(dot_surf, COLOR_LEGAL_FILL, (SQUARE_SIZE // 2, SQUARE_SIZE // 2), 16)
+            surface.blit(dot_surf, (cx - SQUARE_SIZE // 2, cy - SQUARE_SIZE // 2))
+            # Solid ring
+            pygame.draw.circle(surface, COLOR_LEGAL_RING, (cx, cy), 16, 3)
+            # If it's a capture, mark it red
+            if move.is_capture:
+                pygame.draw.circle(surface, (255, 60, 60), (cx, cy), 18, 3)
 
 
-def draw_status(surface: pygame.Surface, text: str) -> None:
-    """Draw status text at the top."""
-    font = pygame.font.SysFont("Arial", 22)
-    rendered = font.render(text, True, COLOR_TEXT)
-    surface.fill(COLOR_BG, (0, 0, WINDOW_W, MARGIN_TOP))
-    surface.blit(rendered, (10, 12))
+def draw_captured_pieces(
+    surface: pygame.Surface,
+    white_captured: int,
+    white_kings_captured: int,
+    black_captured: int,
+    black_kings_captured: int,
+) -> None:
+    """Draw captured piece counts in side panels."""
+    font = pygame.font.SysFont("Segoe UI", 14)
+    title_font = pygame.font.SysFont("Segoe UI", 13, bold=True)
+
+    # Left panel — pieces captured BY white (i.e. black pieces lost)
+    panel_y = BOARD_OFFSET_Y + 10
+    left_x = 12
+
+    pygame.draw.rect(surface, COLOR_PANEL_BG, (4, BOARD_OFFSET_Y, PANEL_W - 8, BOARD_PX), border_radius=6)
+
+    title = title_font.render("BLACK lost", True, COLOR_TEXT_DIM)
+    surface.blit(title, (left_x, panel_y))
+    panel_y += 28
+
+    # Draw mini black pieces as captured trophies
+    mini_r = 12
+    for i in range(black_captured):
+        row_i = i // 3
+        col_i = i % 3
+        mx = left_x + 16 + col_i * 28
+        my = panel_y + 16 + row_i * 28
+        pygame.draw.circle(surface, COLOR_BLACK_PIECE, (mx, my), mini_r)
+        pygame.draw.circle(surface, (80, 80, 80), (mx, my), mini_r, 1)
+
+    for i in range(black_kings_captured):
+        row_i = (black_captured + i) // 3
+        col_i = (black_captured + i) % 3
+        mx = left_x + 16 + col_i * 28
+        my = panel_y + 16 + row_i * 28
+        pygame.draw.circle(surface, COLOR_BLACK_PIECE, (mx, my), mini_r)
+        pygame.draw.circle(surface, COLOR_KING_CROWN, (mx, my), mini_r, 2)
+
+    # Right panel — pieces captured BY black (i.e. white pieces lost)
+    right_x = WINDOW_W - PANEL_W + 12
+    panel_y = BOARD_OFFSET_Y + 10
+
+    pygame.draw.rect(surface, COLOR_PANEL_BG,
+                     (WINDOW_W - PANEL_W + 4, BOARD_OFFSET_Y, PANEL_W - 8, BOARD_PX), border_radius=6)
+
+    title = title_font.render("WHITE lost", True, COLOR_TEXT_DIM)
+    surface.blit(title, (right_x, panel_y))
+    panel_y += 28
+
+    for i in range(white_captured):
+        row_i = i // 3
+        col_i = i % 3
+        mx = right_x + 16 + col_i * 28
+        my = panel_y + 16 + row_i * 28
+        pygame.draw.circle(surface, COLOR_WHITE_PIECE, (mx, my), mini_r)
+        pygame.draw.circle(surface, (180, 180, 180), (mx, my), mini_r, 1)
+
+    for i in range(white_kings_captured):
+        row_i = (white_captured + i) // 3
+        col_i = (white_captured + i) % 3
+        mx = right_x + 16 + col_i * 28
+        my = panel_y + 16 + row_i * 28
+        pygame.draw.circle(surface, COLOR_WHITE_PIECE, (mx, my), mini_r)
+        pygame.draw.circle(surface, COLOR_KING_CROWN, (mx, my), mini_r, 2)
+
+
+def draw_status(surface: pygame.Surface, text: str, game_over: bool = False) -> None:
+    """Draw status bar at the top."""
+    pygame.draw.rect(surface, COLOR_PANEL_BG, (0, 0, WINDOW_W, MARGIN_TOP), border_radius=0)
+    pygame.draw.line(surface, COLOR_BORDER, (0, MARGIN_TOP - 1), (WINDOW_W, MARGIN_TOP - 1))
+
+    font = pygame.font.SysFont("Segoe UI", 20, bold=True)
+    color = COLOR_TEXT_GOLD if game_over else COLOR_TEXT
+    rendered = font.render(text, True, color)
+    surface.blit(rendered, (WINDOW_W // 2 - rendered.get_width() // 2, 18))
+
+
+def draw_bottom_bar(surface: pygame.Surface, ply: int, move_limit: int) -> None:
+    """Draw bottom info bar with ply counter and controls hint."""
+    y = WINDOW_H - MARGIN_BOTTOM
+    pygame.draw.rect(surface, COLOR_PANEL_BG, (0, y, WINDOW_W, MARGIN_BOTTOM))
+    pygame.draw.line(surface, COLOR_BORDER, (0, y), (WINDOW_W, y))
+
+    font = pygame.font.SysFont("Segoe UI", 12)
+    left_text = font.render(f"Ply: {ply}/{move_limit}", True, COLOR_TEXT_DIM)
+    surface.blit(left_text, (12, y + 12))
+
+    right_text = font.render("R: restart | ESC: quit", True, COLOR_TEXT_DIM)
+    surface.blit(right_text, (WINDOW_W - right_text.get_width() - 12, y + 12))
 
 
 def pixel_to_square(pos: tuple[int, int]) -> Optional[tuple[int, int]]:
     """Convert pixel (x, y) to board (row, col), or None if outside board."""
     x, y = pos
-    y -= MARGIN_TOP
+    x -= BOARD_OFFSET_X
+    y -= BOARD_OFFSET_Y
     if y < 0 or x < 0 or x >= BOARD_PX or y >= BOARD_PX:
         return None
     col = x // SQUARE_SIZE
