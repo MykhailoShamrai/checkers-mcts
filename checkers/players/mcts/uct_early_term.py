@@ -56,7 +56,7 @@ class UCTEarlyTermPlayer(Player):
                 v = material_heuristic(node.state.board, root_color)
                 result = (1.0 - self.alpha) * result + self.alpha * v
 
-            self._backpropagate(node, result)
+            self._backpropagate(node, result, root_color)
 
         return root.best_move_child().move
 
@@ -94,7 +94,11 @@ class UCTEarlyTermPlayer(Player):
         # Early termination: evaluate with heuristic.
         return material_heuristic(state.board, root_color)
 
-    def _backpropagate(self, node: UCTNode, result: float) -> None:
+    def _backpropagate(self, node: UCTNode, result: float, root_color: int) -> None:
+        # Adjust initial perspective: if leaf's to_move == root_color,
+        # the parent is opponent, so negate to store from parent's perspective.
+        if node.state.to_move == root_color:
+            result = -result
         while node is not None:
             node.visits += 1
             node.value += result

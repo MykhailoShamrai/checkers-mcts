@@ -103,17 +103,22 @@ def run_single_experiment(
     seeds: list[int],
     output_dir: Path,
     verbose: bool = True,
+    workers: int | None = None,
 ) -> None:
     """Run one experiment config and append results to CSV."""
     exp_id = exp["id"]
     if verbose:
-        print(f"\n{'='*60}")
+        print(f"{'='*60}")
         print(f"Running {exp_id}: {exp['a']}({exp['a_kw']}) vs {exp['b']}({exp['b_kw']}) "
-              f"move_limit={exp['move_limit']}")
+              f"move_limit={exp['move_limit']} | workers={workers or 'all cores'}")
         print(f"{'='*60}")
 
     factory_a = make_factory(exp["a"], **exp["a_kw"])
     factory_b = make_factory(exp["b"], **exp["b_kw"])
+
+    # Picklable specs for parallel mode
+    spec_a = (exp["a"], exp["a_kw"])
+    spec_b = (exp["b"], exp["b_kw"])
 
     t0 = time.perf_counter()
     result = run_tournament(
@@ -126,6 +131,9 @@ def run_single_experiment(
         move_limit=exp["move_limit"],
         swap_colors=True,
         verbose=verbose,
+        workers=workers,
+        player_a_spec=spec_a,
+        player_b_spec=spec_b,
     )
     elapsed = time.perf_counter() - t0
 
@@ -179,6 +187,7 @@ def main():
     parser.add_argument("--output", type=str, default="results", help="Output directory for CSV files")
     parser.add_argument("--games", type=int, default=50, help="Number of games per experiment")
     parser.add_argument("--seeds", type=int, default=20, help="Number of distinct seeds")
+    parser.add_argument("--workers", type=int, default=None, help="Number of parallel processes (default: all CPU cores)")
     parser.add_argument("--quick", action="store_true", help="Quick mode: 4 games, subset of experiments")
     parser.add_argument("--experiments", type=str, nargs="*", help="Run only specific experiment IDs (e.g. E01 E02)")
     args = parser.parse_args()
@@ -198,6 +207,7 @@ def main():
     print(f"Output: {output_dir}")
     print(f"Games per experiment: {num_games}")
     print(f"Seeds: {seeds[:5]}{'...' if len(seeds) > 5 else ''}")
+    print(f"Workers: {args.workers or 'all CPU cores'}")
     print(f"Experiments to run: {[e['id'] for e in experiments]}")
     print(f"Total experiments: {len(experiments)}")
     print()
@@ -207,7 +217,7 @@ def main():
 
     for i, exp in enumerate(experiments, 1):
         print(f"\n[{i}/{total_exp}] ", end="")
-        run_single_experiment(exp, num_games, seeds, output_dir, verbose=True)
+        run_single_experiment(exp, num_games, seeds, output_dir, verbose=True, workers=args.workers)
         elapsed_total = time.perf_counter() - total_start
         avg_per_exp = elapsed_total / i
         remaining = avg_per_exp * (total_exp - i)

@@ -80,13 +80,20 @@ class UCTPlayer(Player):
         return state.result(self._root_color(node))
 
     def _backpropagate(self, node: UCTNode, result: float) -> None:
-        """Propagate result up the tree, flipping perspective at each level."""
+        """Propagate result up the tree, flipping perspective at each level.
+
+        node.value accumulates reward from the perspective of the *parent's*
+        side-to-move (the player who chose to enter this node). The simulation
+        returns a result from root's perspective, so we must adjust the initial
+        sign based on the leaf's depth parity.
+        """
+        # If the leaf's to_move == root_color, then the parent is the opponent
+        # and we need to negate so the value is stored from opponent's perspective.
+        root_color = self._root_color(node)
+        if node.state.to_move == root_color:
+            result = -result
         while node is not None:
             node.visits += 1
-            # node.value accumulates reward from the perspective of the
-            # *parent's* side-to-move (the side that chose to enter this node).
-            # If node's parent moved into this node, the result for that player
-            # is -result when perspective flips.
             node.value += result
             result = -result
             node = node.parent

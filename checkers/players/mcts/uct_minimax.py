@@ -45,7 +45,7 @@ class UCTMinimaxPlayer(Player):
             node = self._select(root)
             node = self._expand(node)
             result = self._simulate(node, root.state.to_move)
-            self._backpropagate(node, result)
+            self._backpropagate(node, result, root.state.to_move)
 
         return root.best_move_child().move
 
@@ -72,9 +72,14 @@ class UCTMinimaxPlayer(Player):
         """Evaluate the leaf using depth-limited minimax instead of random playout."""
         if node.state.is_terminal():
             return node.state.result(root_color)
-        return self._minimax(node.state, self.minimax_depth, root_color, True)
+        maximizing = (node.state.to_move == root_color)
+        return self._minimax(node.state, self.minimax_depth, root_color, maximizing)
 
-    def _backpropagate(self, node: UCTNode, result: float) -> None:
+    def _backpropagate(self, node: UCTNode, result: float, root_color: int) -> None:
+        # Adjust initial perspective: if leaf's to_move == root_color,
+        # the parent is opponent, so negate to store from parent's perspective.
+        if node.state.to_move == root_color:
+            result = -result
         while node is not None:
             node.visits += 1
             node.value += result
