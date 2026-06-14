@@ -30,7 +30,7 @@
 
 % ===========================================================================
 \begin{abstract}
-W niniejszym raporcie przedstawiono badanie skuteczności algorytmu Monte Carlo Tree Search (MCTS) z~formułą Upper Confidence Bounds Applied to Trees (UCT) w~grze w~warcaby na planszy 8\texttimes8 z~damkami latającymi. Porównano cztery warianty graczy komputerowych: czysty UCT, UCT z~płytkim przeszukiwaniem minimax (hybryda wg Baier i~Winands, 2014), UCT z~wczesnym obcinaniem symulacji i~ewaluacją heurystyczną (Lorentz, 2016; Lanctot et~al., 2014) oraz gracz heurystyczny oparty o~alpha-beta z~ewaluacją inspirowaną programem Chinook. Zbadano wpływ stałej eksploracji~$C$, budżetu iteracji oraz limitu ruchów na skuteczność poszczególnych podejść. Eksperymenty przeprowadzono na 50~partiach dla każdej konfiguracji (18 konfiguracji, 900 partii łącznie) z~20 ziarnami generatora losowego w~celu zapewnienia powtarzalności i~oceny rozrzutu wyników.
+W niniejszym raporcie przedstawiono badanie skuteczności algorytmu Monte Carlo Tree Search (MCTS) z~formułą Upper Confidence Bounds Applied to Trees (UCT) w~grze w~warcaby na planszy 8\texttimes8 z~damkami latającymi. Porównano cztery warianty graczy komputerowych: czysty UCT, UCT z~płytkim przeszukiwaniem minimax (hybryda wg Baier i~Winands, 2014), UCT z~wczesnym obcinaniem symulacji i~ewaluacją heurystyczną (Lorentz, 2016; Lanctot et~al., 2014) oraz gracz heurystyczny oparty o~alpha-beta z~ewaluacją inspirowaną programem Chinook. Zbadano wpływ stałej eksploracji~$C$, budżetu iteracji oraz limitu ruchów na skuteczność poszczególnych podejść. Eksperymenty przeprowadzono na 50~partiach dla każdej konfiguracji (18 konfiguracji, 900 partii łącznie) z~50 unikalnymi ziarnami generatora losowego i~naprzemienną zamianą kolorów, zapewniając pełną powtarzalność i~niezależność prób.
 
 Wyniki wskazują, że zwiększenie budżetu iteracji istotnie poprawia skuteczność UCT — przy 5000 iteracji UCT osiąga 80\% zwycięstw przeciwko alpha-beta (depth=6). Stała eksploracji $C$ ma ograniczony wpływ przy niskim budżecie (100 iteracji), natomiast wariant z~wczesnym obcinaniem (early termination) wykazuje wyraźną przewagę nad czystym UCT (60\% win rate przy 1000 iteracji). Hybryda minimax jest wolniejsza obliczeniowo i~przy wysokich budżetach traci na skuteczności z~powodu mniejszej liczby odwiedzonych węzłów. Skrócenie limitu ruchów ze 150 do 100 zwiększa odsetek remisów i~faworyzuje strategie oparte na wczesnej ewaluacji materiałowej.
 \end{abstract}
@@ -148,7 +148,8 @@ Eksperymenty zorganizowane w~macierz 18 konfiguracji (Tabela~\ref{tab:experiment
   \item \textbf{H4}: Powtórzenie wybranych porównań z~limitem 100 ruchów (vs domyślne 150).
 \end{itemize}
 
-Dla każdej konfiguracji: minimum 50 partii, minimum 20 ziaren, zamiana kolorów (co druga partia).
+\subsubsection{Protokół eksperymentalny}
+Dla każdej konfiguracji rozegrano 50 partii z~pulą 50 unikalnych ziaren generatora losowego (seedów 0--49). Partie naprzemiennie zamieniają kolory (co druga gra gracz~A gra czarnymi), co daje 25 partii jako biały i~25 jako czarny dla każdego gracza. Dzięki determinizmowi implementacji (dany seed + przydział kolorów = identyczna partia) całość jest w~pełni reprodukowalna. Łącznie przeprowadzono $18 \times 50 = 900$ unikalnych partii.
 
 \begin{table}[H]
 \centering
@@ -167,6 +168,16 @@ E16--E18 & H4 & Różni & AlphaBeta & 1000 & 1.4 & 100 & Skrócony limit \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsubsection{Uzasadnienie macierzy eksperymentów}
+Macierz 18 konfiguracji zaprojektowano tak, aby każda hipoteza miała dedykowaną grupę porównawczą:
+\begin{itemize}[nosep]
+  \item E01--E07 izolują wpływ~$C$ przy stałym budżecie (100 iter) — pozwalają wyznaczyć optimum parametru.
+  \item E08--E11 uzupełniają o~E05 ($C=1.4$, 100 iter) jako punkt wyjścia budget-sweepu.
+  \item E12--E15 porównują warianty bezpośrednio z~czystym UCT (nie z~AB), co eliminuje confound siły alpha-beta.
+  \item E16--E18 replikują warunki E09/E12/E14 z~krótszym limitem, dając paired comparison z~jednym zmienionym czynnikiem.
+\end{itemize}
+Dzięki temu każdą hipotezę testujemy w~warunkach ceteris paribus, zmieniając wyłącznie badany parametr.
 
 % ===========================================================================
 \section{Hipotezy badawcze}
