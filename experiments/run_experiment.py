@@ -186,7 +186,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run checkers MCTS experiments")
     parser.add_argument("--output", type=str, default="results", help="Output directory for CSV files")
     parser.add_argument("--games", type=int, default=50, help="Number of games per experiment")
-    parser.add_argument("--seeds", type=int, default=50, help="Number of distinct seeds")
+    parser.add_argument("--seeds", type=int, default=20, help="Number of distinct seeds")
     parser.add_argument("--workers", type=int, default=None, help="Number of parallel processes (default: all CPU cores)")
     parser.add_argument("--quick", action="store_true", help="Quick mode: 4 games, subset of experiments")
     parser.add_argument("--experiments", type=str, nargs="*", help="Run only specific experiment IDs (e.g. E01 E02)")
