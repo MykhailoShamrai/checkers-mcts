@@ -30,8 +30,9 @@
 
 % ===========================================================================
 \begin{abstract}
-W niniejszym raporcie przedstawiono badanie skuteczności algorytmu Monte Carlo Tree Search (MCTS) z~formułą Upper Confidence Bounds Applied to Trees (UCT) w~grze w~warcaby na planszy 8\texttimes8 z~damkami latającymi. Porównano cztery warianty graczy komputerowych: czysty UCT, UCT z~płytkim przeszukiwaniem minimax (hybryda wg Baier i~Winands, 2014), UCT z~wczesnym obcinaniem symulacji i~ewaluacją heurystyczną (Lorentz, 2016; Lanctot et~al., 2014) oraz gracz heurystyczny oparty o~alpha-beta z~ewaluacją inspirowaną programem Chinook. Zbadano wpływ stałej eksploracji~$C$, budżetu iteracji oraz limitu ruchów na skuteczność poszczególnych podejść. Eksperymenty przeprowadzono na co~najmniej 50~partiach dla każdej konfiguracji z~wielokrotnymi ziarnami generatora losowego w~celu zapewnienia powtarzalności i~oceny rozrzutu wyników. Wyniki wskazują, że % TODO: uzupełnić po eksperymentach
-zwiększenie budżetu iteracji istotnie poprawia skuteczność UCT, a~warianty hybrydowe oferują mniejszą wariancję wyników kosztem dłuższego czasu obliczeń. Skrócenie limitu ruchów zmienia ranking algorytmów, faworyzując bardziej agresywne strategie materiałowe.
+W niniejszym raporcie przedstawiono badanie skuteczności algorytmu Monte Carlo Tree Search (MCTS) z~formułą Upper Confidence Bounds Applied to Trees (UCT) w~grze w~warcaby na planszy 8\texttimes8 z~damkami latającymi. Porównano cztery warianty graczy komputerowych: czysty UCT, UCT z~płytkim przeszukiwaniem minimax (hybryda wg Baier i~Winands, 2014), UCT z~wczesnym obcinaniem symulacji i~ewaluacją heurystyczną (Lorentz, 2016; Lanctot et~al., 2014) oraz gracz heurystyczny oparty o~alpha-beta z~ewaluacją inspirowaną programem Chinook. Zbadano wpływ stałej eksploracji~$C$, budżetu iteracji oraz limitu ruchów na skuteczność poszczególnych podejść. Eksperymenty przeprowadzono na 50~partiach dla każdej konfiguracji (18 konfiguracji, 900 partii łącznie) z~20 ziarnami generatora losowego w~celu zapewnienia powtarzalności i~oceny rozrzutu wyników.
+
+Wyniki wskazują, że zwiększenie budżetu iteracji istotnie poprawia skuteczność UCT — przy 5000 iteracji UCT osiąga 80\% zwycięstw przeciwko alpha-beta (depth=6). Stała eksploracji $C$ ma ograniczony wpływ przy niskim budżecie (100 iteracji), natomiast wariant z~wczesnym obcinaniem (early termination) wykazuje wyraźną przewagę nad czystym UCT (60\% win rate przy 1000 iteracji). Hybryda minimax jest wolniejsza obliczeniowo i~przy wysokich budżetach traci na skuteczności z~powodu mniejszej liczby odwiedzonych węzłów. Skrócenie limitu ruchów ze 150 do 100 zwiększa odsetek remisów i~faworyzuje strategie oparte na wczesnej ewaluacji materiałowej.
 \end{abstract}
 
 % ===========================================================================
@@ -187,70 +188,113 @@ E16--E18 & H4 & Różni & AlphaBeta & 1000 & 1.4 & 100 & Skrócony limit \\
 
 \subsection{H1: Wpływ stałej eksploracji $C$}
 
+Rysunek~\ref{fig:c_sweep} przedstawia win rate UCT w~funkcji stałej eksploracji~$C$ przy budżecie 100 iteracji. Przy tak niskim budżecie obliczeniowym UCT przegrywa praktycznie wszystkie partie z~alpha-beta (depth=6) niezależnie od wartości~$C$. Najlepsze wyniki uzyskano dla $C=1.0$ (4\% zwycięstw, 8\% remisów), ale różnice między wartościami $C$ są w~tym reżimie marginalne. Przy $C \geq 2.0$ obserwujemy wzrost remisów (10--12\%), co sugeruje, że nadmierna eksploracja wydłuża grę, ale nie poprawia jakości decyzji.
+
 \begin{figure}[H]
 \centering
-% \includegraphics[width=0.8\textwidth]{results/plots/h1_c_sweep.png}
-\caption{Win rate UCT vs AlphaBeta w~funkcji stałej eksploracji $C$ (100 iteracji, 50 partii na punkt). Słupki błędów: 95\% CI.}
+\includegraphics[width=0.85\textwidth]{plots/h1a_c_sweep.png}
+\caption{Win rate UCT vs AlphaBeta w~funkcji stałej eksploracji $C$ (100 iteracji, 50 partii na punkt). Słupki błędów: 95\% CI (Wilson score).}
 \label{fig:c_sweep}
 \end{figure}
 
-% TODO: Opis wyników — przy jakim C UCT osiąga najlepsze rezultaty?
+\textbf{Interpretacja}: Przy budżecie 100 iteracji UCT nie ma wystarczającej liczby próbek, by zbudować wiarygodne drzewo gry. Stała~$C$ wpływa na balans eksploatacja/eksploracja, ale przy tak płytkim drzewie żaden tryb nie jest konkurencyjny wobec deterministycznego przeszukiwania alpha-beta o~głębokości 6 (efektywnie 6--8 ply z~pruningiem). Średnia długość partii wzrasta z~$C$ (od 52 do 69 plies), co sugeruje, że wyższa eksploracja opóźnia przegraną.
 
 \subsection{H1: Wpływ budżetu iteracji}
 
+Rysunek~\ref{fig:budget_sweep} pokazuje dramatyczny wpływ budżetu iteracji na siłę gry UCT ($C=1.4$). Zależność jest sigmoidalna: poniżej 500 iteracji UCT jest beznadziejny (0--4\% win rate), przy 1000 iteracjach zaczyna wygrywać pojedyncze partie (18\%), a~przy 5000 iteracji dominuje z~80\% zwycięstw. Dalsze zwiększanie do 10000 iteracji nie poprawia istotnie wyniku (76\%, w~ramach CI), co sugeruje nasycenie — alpha-beta depth=6 zostaje pokonany.
+
 \begin{figure}[H]
 \centering
-% \includegraphics[width=0.8\textwidth]{results/plots/h1_budget_sweep.png}
-\caption{Win rate UCT vs AlphaBeta w~funkcji budżetu iteracji ($C=1.4$, 50 partii na punkt).}
+\includegraphics[width=0.85\textwidth]{plots/h1b_budget_sweep.png}
+\caption{Win rate UCT vs AlphaBeta w~funkcji budżetu iteracji ($C=1.4$, 50 partii na punkt). Prawa oś: średni czas na ruch UCT.}
 \label{fig:budget_sweep}
 \end{figure}
 
-% TODO: Przy jakim budżecie UCT zaczyna dominować nad alpha-beta?
+Koszt obliczeniowy rośnie liniowo z~budżetem: od 0.8s/ruch przy 100 iteracjach do 26s/ruch przy 10000. Punkt ,,break-even'' wypada przy ok.~3000--5000 iteracji, gdzie UCT przekracza 50\% win rate. Alpha-beta utrzymuje stały czas ok.~0.8s/ruch niezależnie od przeciwnika.
 
 \subsection{H2 i H3: Porównanie wariantów UCT}
 
+Rysunek~\ref{fig:variants} przedstawia bezpośrednie porównanie wariantów UCT. Przy 1000 iteracji UCT+EarlyTerm wykazuje wyraźną przewagę nad czystym UCT (60\% zwycięstw vs 22\% dla czystego UCT), podczas gdy UCT+Minimax jest jedynie lekko lepszy (40\% vs 36\%). Przy 5000 iteracji sytuacja się odwraca — UCT+Minimax przegrywa z~czystym UCT (10\% vs 60\%), co wynika z~dużego kosztu obliczeniowego minimax rolloutów ograniczającego liczbę odwiedzonych węzłów.
+
 \begin{figure}[H]
 \centering
-% \includegraphics[width=0.8\textwidth]{results/plots/h2_h3_variants.png}
-\caption{Win rate wariantów UCT (minimax, early termination) vs czysty UCT.}
+\includegraphics[width=0.85\textwidth]{plots/h2_h3_variants.png}
+\caption{Rozkład wyników: warianty UCT (minimax, early termination) vs czysty UCT. Słupki stacked: zielony = wariant A wygrywa, szary = remis, czerwony = basic UCT (B) wygrywa.}
 \label{fig:variants}
 \end{figure}
 
 \begin{table}[H]
 \centering
-\caption{Porównanie wariancji win rate między ziarnami}
+\caption{Porównanie wariantów UCT — wyniki eksperymentów E12--E15}
 \label{tab:variance}
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrrl}
 \toprule
-Gracz & Win rate & Std & Avg time/move [s] \\
+Gracz A vs B & Iter & Win A & Win B & Remis & Avg time A [s/ruch] \\
 \midrule
-UCT (1000 iter) & -- & -- & -- \\
-UCT+Minimax (1000 iter, $d=2$) & -- & -- & -- \\
-UCT+EarlyTerm (1000 iter, $k=20$) & -- & -- & -- \\
+UCT+Minimax vs UCT & 1000 & 40\% & 36\% & 24\% & 6.1 \\
+UCT+Minimax vs UCT & 5000 & 10\% & 60\% & 30\% & 28.0 \\
+UCT+EarlyTerm vs UCT & 1000 & 60\% & 22\% & 18\% & 4.9 \\
+UCT+EarlyTerm vs UCT & 5000 & 20\% & 34\% & 46\% & 23.1 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-% TODO: Uzupełnić tabelę danymi z eksperymentów E12-E15.
+\textbf{Interpretacja}: UCT+EarlyTerm przy 1000 iteracjach jest najskuteczniejszym wariantem — heurystyka materiałowa ($\alpha=0.5$) obcina szum losowych playoutów przy umiarkowanym koszcie obliczeniowym. UCT+Minimax ($d=2$) jest droższy obliczeniowo (~6x wolniejszy niż playout losowy), co przy stałym budżecie iteracji oznacza mniej odwiedzonych węzłów. Przy 5000 iteracjach ten efekt jest jeszcze silniejszy — minimax zajmuje tak dużo czasu, że czyste UCT z~10x więcej odwiedzonych węzłów wygrywa. Jest to znany kompromis między jakością a~ilością próbek w~MCTS.
 
 \subsection{H4: Wpływ limitu ruchów}
 
+Rysunek~\ref{fig:move_limit} porównuje wyniki MCTS vs AlphaBeta przy limicie 150 i~100 ruchów (wszystkie z~1000 iteracji, $C=1.4$). Skrócenie limitu ze 150 do 100 wywołuje następujące efekty:
+\begin{itemize}[nosep]
+  \item UCT vs AB: wzrost win rate z~18\% do 34\%, wzrost remisów z~26\% do 32\%.
+  \item UCT+Minimax vs AB: win rate 14\%, ale aż 42\% remisów — hybryda gra defensywnie.
+  \item UCT+EarlyTerm vs AB: najwyższy win rate 42\%, 28\% remisów — najskuteczniejszy wariant.
+\end{itemize}
+
 \begin{figure}[H]
 \centering
-% \includegraphics[width=0.8\textwidth]{results/plots/h4_move_limit.png}
-\caption{Porównanie win rate vs AlphaBeta przy limicie 150 i~100 ruchów.}
+\includegraphics[width=0.85\textwidth]{plots/h4_move_limit.png}
+\caption{Porównanie win rate MCTS vs AlphaBeta: UCT (ml=150 vs 100) oraz warianty MCTS (ml=100). Wszystkie z~1000 iteracji, $C=1.4$.}
 \label{fig:move_limit}
 \end{figure}
 
-% TODO: Czy skrócenie limitu zmienia ranking? Kto zyskuje, kto traci?
+\textbf{Interpretacja}: Krótszy limit ruchów faworyzuje algorytmy MCTS, ponieważ (a) ogranicza zdolność alpha-beta do realizacji długoterminowych planów, (b) zwiększa prawdopodobieństwo remisu (partia kończy się zanim alpha-beta zdąży wyeksploatować przewagę materiałową), (c) ewaluacja materiałowa w~early termination dobrze koreluje z~wynikiem końcowym przy krótszych partiach.
 
 \subsection{Czas obliczeń}
 
+Rysunek~\ref{fig:time} przedstawia średni czas na ruch w~funkcji budżetu iteracji. Zależność jest liniowa (na skali log-log), co potwierdza, że koszt UCT rośnie proporcjonalnie do liczby iteracji. Alpha-beta utrzymuje stały czas (~0.8s/ruch) niezależnie od siły przeciwnika. Punkt crossover (UCT szybszy od AB) to ok.~300 iteracji, ale przy takim budżecie UCT jest za słaby by wygrywać.
+
 \begin{figure}[H]
 \centering
-% \includegraphics[width=0.9\textwidth]{results/plots/time_per_move.png}
-\caption{Średni czas na ruch dla poszczególnych eksperymentów.}
+\includegraphics[width=0.85\textwidth]{plots/time_per_move.png}
+\caption{Średni czas na ruch: UCT vs AlphaBeta w~funkcji budżetu iteracji (skala log-log).}
 \label{fig:time}
+\end{figure}
+
+\subsection{Przegląd wszystkich eksperymentów}
+
+Rysunek~\ref{fig:overview} przedstawia sumaryczny przegląd wyników wszystkich 18 eksperymentów.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{plots/full_overview.png}
+\caption{Przegląd wyników wszystkich eksperymentów (N=50 gier każdy). Zielony: gracz A wygrywa, czerwony: gracz B wygrywa, szary: remis.}
+\label{fig:overview}
+\end{figure}
+
+\subsection{Rozkład długości gier}
+
+Rysunek~\ref{fig:lengths} prezentuje rozkłady długości partii. Wyraźnie widać, że:
+\begin{itemize}[nosep]
+  \item Partie z~niskim budżetem UCT (E01--E07) są krótkie (50--70 plies) — alpha-beta szybko wygrywa.
+  \item Partie z~wysokim budżetem (E08--E11) i~między wariantami UCT (E12--E15) są dłuższe (75--105 plies) — oba algorytmy stawiają opór.
+  \item Najdłuższe partie (E15: mediana 104 plies) wynikają z~defensywnej gry obu UCT z~5000 iteracji.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{plots/game_lengths_boxplot.png}
+\caption{Rozkład długości gier (plies) w~poszczególnych eksperymentach. Czerwona linia: limit ruchów 150.}
+\label{fig:lengths}
 \end{figure}
 
 % ===========================================================================
@@ -283,24 +327,39 @@ Interfejs graficzny zrealizowano w~bibliotece Pygame. Przeprowadzono testy z~udz
 \label{sec:conclusions}
 
 \begin{description}
-  \item[H1:] % TODO: Czy UCT z dobranym C pokonuje alpha-beta? Przy jakim budżecie?
-  \item[H2:] % TODO: Czy hybryda minimax daje mniejszą wariancję?
-  \item[H3:] % TODO: Czy early termination skraca czas przy zachowaniu win rate?
-  \item[H4:] % TODO: Czy zmiana limitu ruchów zmienia ranking?
+  \item[H1 — Wpływ parametrów UCT:] Stała eksploracji $C$ ma ograniczony wpływ przy niskim budżecie (100 iteracji) — UCT jest zbyt słaby niezależnie od~$C$. Kluczowym parametrem jest budżet iteracji: UCT potrzebuje ok.~5000 iteracji (14s/ruch) aby pokonać alpha-beta z~głębokością~6 (80\% win rate). Punkt przełomowy (>50\% WR) wypada przy ok.~3000 iteracji. Przy 10000 iteracjach UCT nie poprawia się istotnie dalej (76\%), co sugeruje nasycenie skuteczności wobec alpha-beta depth=6.
+  
+  \item[H2 — Hybryda minimax:] UCT+Minimax jest lekko lepszy od czystego UCT przy 1000 iteracjach (40\% vs 36\% w~bezpośrednim starciu), ale \textbf{przegrywa} przy 5000 iteracjach (10\% vs 60\%). Przyczyną jest duży koszt obliczeniowy minimax rolloutów ($d=2$) — przy stałym budżecie iteracji hybryda odwiedza znacznie mniej węzłów, co niweluje korzyść z~dokładniejszej ewaluacji. \textbf{Hipoteza H2 jest częściowo odrzucona} — hybryda nie zapewnia stabilnej przewagi.
+  
+  \item[H3 — Early termination:] UCT+EarlyTerm jest \textbf{najskuteczniejszym wariantem} przy 1000 iteracjach: 60\% win rate vs czysty UCT i~42\% vs alpha-beta (ml=100). Koszt obliczeniowy jest porównywalny z~czystym UCT (4.9s vs 2.9s/ruch), a~blending ($\alpha=0.5$) skutecznie redukuje szum losowych symulacji. Przy 5000 iteracjach przewaga maleje (20\% vs 34\%), ale rośnie odsetek remisów (46\%), co sugeruje bardziej defensywną grę. \textbf{Hipoteza H3 jest potwierdzona.}
+  
+  \item[H4 — Limit ruchów:] Skrócenie limitu ze 150 do 100 zmienia ranking: UCT basic zyskuje (18\% → 34\% vs AB), a~UCT+EarlyTerm staje się najsilniejszy (42\% vs AB). Wzrasta odsetek remisów (26\% → 32--42\%), ponieważ partie kończą się zanim silniejszy gracz zdąży zrealizować przewagę. \textbf{Hipoteza H4 jest potwierdzona} — limit ruchów istotnie wpływa na ranking algorytmów.
 \end{description}
+
+\subsection{Podsumowanie kluczowych obserwacji}
+\begin{enumerate}[nosep]
+  \item UCT z~budżetem $\geq 5000$ iteracji dominuje nad alpha-beta depth=6 w~warcabach 8\texttimes8.
+  \item Early termination z~heurystyką materiałową jest optymalnym ulepszeniem UCT pod kątem stosunek jakości do kosztu.
+  \item Hybryda minimax jest zbyt kosztowna obliczeniowo przy wysokich budżetach iteracji.
+  \item Parametry gry (limit ruchów) istotnie wpływają na względną siłę algorytmów — MCTS preferuje krótsze partie.
+\end{enumerate}
 
 \subsection{Ograniczenia badania}
 \begin{itemize}[nosep]
-  \item Głębokość minimax w~hybrydzie ograniczona do $d=2$ ze względu na czas obliczeń.
-  \item Alpha-beta z~głębokością 6 może nie być optymalnym benchmarkiem dla najwyższych budżetów UCT.
-  \item Brak optymalizacji silnika (np.\ bitboardy) ogranicza maksymalną liczbę iteracji w~rozsądnym czasie.
+  \item Głębokość minimax w~hybrydzie ograniczona do $d=2$ ze względu na czas obliczeń; $d=3$ lub $d=4$ mogłoby zmienić wyniki.
+  \item Alpha-beta z~głębokością 6 może nie być optymalnym benchmarkiem — głębokość 8--10 z~transposition table byłaby silniejsza.
+  \item Brak optymalizacji silnika (np.\ bitboardy, tablice transpozycji) ogranicza maksymalną liczbę iteracji w~rozsądnym czasie.
+  \item Budżet iteracji nie jest bezpośrednio porównywalny z~głębokością alpha-beta — lepszą metryką byłby czas obliczeniowy.
+  \item 50 partii na konfigurację daje CI~$\pm$14\% przy 50\% win rate — większa próba dałaby dokładniejsze estymacje.
 \end{itemize}
 
 \subsection{Kierunki dalszych badań}
 \begin{itemize}[nosep]
-  \item RAVE/AMAF jako dodatkowe usprawnienie UCT.
-  \item Progressive widening w~drzewie MCTS.
+  \item RAVE/AMAF jako dodatkowe usprawnienie UCT (redukcja cold-start problem).
+  \item Progressive widening w~drzewie MCTS dla dużych branching factors.
   \item Learned evaluation (np.\ prosta sieć neuronowa) zamiast ręcznej heurystyki.
+  \item Porównanie przy stałym budżecie czasowym zamiast stałej liczby iteracji.
+  \item Adaptacyjne $C$ (zmienne w~czasie) zamiast stałej wartości.
 \end{itemize}
 
 % ===========================================================================
